@@ -21,7 +21,7 @@ class MovingAverageModel:
             raise ValueError("No data loaded. Load data using load_data() method first.")
         
         predictions = []
-        last_obs = self.data[-self.window_size:]  # Most recent `window_size` observations
+        last_obs = self.data[-self.window_size:] 
         
         for _ in range(steps):
             ma_value = last_obs.mean()
