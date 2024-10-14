@@ -50,10 +50,9 @@ class XGBoostModel:
             raise ValueError("The model has not been fitted yet.")
         return {"Feature Importances": self.model.feature_importances_}
 
-# Example usage:
 if __name__ == "__main__":
-    file_path = "path/to/your/timeseries.csv"
-    column_name = "your_column_name"
+    file_path = '/Users/anabellaisaro/Documents/Documents - Anabella’s MacBook Pro/Northwestern/Projects/Deloitte/forecast/data/Forecasting_Schema_Example_20241007.csv'
+    column_name = ""
     xgb_model = XGBoostModel(lags=3, n_estimators=100, learning_rate=0.1, max_depth=3)
     data = xgb_model.load_data(file_path, column_name)
     xgb_model.fit(data)

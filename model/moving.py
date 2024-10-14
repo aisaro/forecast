@@ -31,7 +31,6 @@ class MovingAverageModel:
         
         return predictions
 
-# Example usage:
 if __name__ == "__main__":
     file_path = '/Users/anabellaisaro/Documents/Documents - Anabella’s MacBook Pro/Northwestern/Projects/Deloitte/forecast/data/Forecasting_Schema_Example_20241007.csv'
     column_name = ""
