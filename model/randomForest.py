@@ -8,19 +8,22 @@ class RandomForestModel:
         self.lags = lags
         self.model = RandomForestRegressor(n_estimators=n_estimators, random_state=random_state)
         
-    def load_data(self, file_path, column_name):
+    def load_data(self, file_path):
         data = pd.read_csv(file_path)
-        if column_name not in data.columns:
-            raise ValueError(f"Column '{column_name}' not found in the file.")
-        return data[column_name]
+        data['Store_Number'] = data['Store'].str.split('_').str[1]
+        data['Department_Number'] = data['DEPARTMENT'].str.extract(r'(\d+)')
+        data['SKU_Number'] = data['SKU'].str.extract(r'(\d+)')
+        data['Category_Number'] = data['CATEGORY'].str.extract(r'(\d+)')
+        data['Week'] = pd.to_datetime(data['Week'])
+        return data
     
     def create_lagged_features(self, data):
         df = pd.DataFrame(data)
         for i in range(1, self.lags + 1):
             df[f'lag_{i}'] = df[0].shift(i)
-        df = df.dropna()  # Drop rows with missing values due to lagging
-        X = df.drop(0, axis=1).values  # Lagged features
-        y = df[0].values  # Target values (the actual observations)
+        df = df.dropna()  
+        X = df.drop(0, axis=1).values  
+        y = df[0].values  
         return X, y
     
     def fit(self, data):
@@ -50,10 +53,9 @@ class RandomForestModel:
         return {"Feature Importances": self.model.feature_importances_}
 
 if __name__ == "__main__":
-    file_path = '/Users/anabellaisaro/Documents/Documents - Anabella’s MacBook Pro/Northwestern/Projects/Deloitte/forecast/data/Forecasting_Schema_Example_20241007.csv'
-    column_name = ""
+    file_path = 'FILE_PATH'
     rf_model = RandomForestModel(lags=3, n_estimators=100)
-    data = rf_model.load_data(file_path, column_name)
+    data = rf_model.load_data(file_path)
     rf_model.fit(data)
     forecast = rf_model.predict(data, steps=5)
 

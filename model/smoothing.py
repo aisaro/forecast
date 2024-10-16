@@ -14,11 +14,14 @@ class ExponentialSmoothingModel:
         self.model = None
         self.fitted_model = None
         
-    def load_data(self, file_path, column_name):
+    def load_data(self, file_path):
         data = pd.read_csv(file_path)
-        if column_name not in data.columns:
-            raise ValueError(f"Column '{column_name}' not found in the file.")
-        return data[column_name]
+        data['Store_Number'] = data['Store'].str.split('_').str[1]
+        data['Department_Number'] = data['DEPARTMENT'].str.extract(r'(\d+)')
+        data['SKU_Number'] = data['SKU'].str.extract(r'(\d+)')
+        data['Category_Number'] = data['CATEGORY'].str.extract(r'(\d+)')
+        data['Week'] = pd.to_datetime(data['Week'])
+        return data
     
     def fit(self, data):
         self.model = ExponentialSmoothing(data, trend=self.trend, seasonal=self.seasonal, seasonal_periods=self.seasonal_periods)
@@ -38,9 +41,8 @@ class ExponentialSmoothingModel:
         return self.fitted_model.summary()
 
 if __name__ == "__main__":
-    file_path = '/Users/anabellaisaro/Documents/Documents - Anabella’s MacBook Pro/Northwestern/Projects/Deloitte/forecast/data/Forecasting_Schema_Example_20241007.csv'
-    column_name = ""
+    file_path = 'FILE_PATH'
     exp_model = ExponentialSmoothingModel(trend='add', seasonal='add', seasonal_periods=12)
-    data = exp_model.load_data(file_path, column_name)
+    data = exp_model.load_data(file_path)
     exp_model.fit(data)
     forecast = exp_model.predict(steps=5)

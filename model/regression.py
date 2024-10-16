@@ -9,11 +9,14 @@ class LinearRegressionModel:
         self.lags = lags
         self.model = LinearRegression()
         
-    def load_data(self, file_path, column_name):
+    def load_data(self, file_path):
         data = pd.read_csv(file_path)
-        if column_name not in data.columns:
-            raise ValueError(f"Column '{column_name}' not found in the file.")
-        return data[column_name]
+        data['Store_Number'] = data['Store'].str.split('_').str[1]
+        data['Department_Number'] = data['DEPARTMENT'].str.extract(r'(\d+)')
+        data['SKU_Number'] = data['SKU'].str.extract(r'(\d+)')
+        data['Category_Number'] = data['CATEGORY'].str.extract(r'(\d+)')
+        data['Week'] = pd.to_datetime(data['Week'])
+        return data
     
     def create_lagged_features(self, data):
         df = pd.DataFrame(data)
@@ -45,9 +48,8 @@ class LinearRegressionModel:
         return {"Coefficients": self.model.coef_, "Intercept": self.model.intercept_}
 
 if __name__ == "__main__":
-    file_path = '/Users/anabellaisaro/Documents/Documents - Anabella’s MacBook Pro/Northwestern/Projects/Deloitte/forecast/data/Forecasting_Schema_Example_20241007.csv'
-    column_name = ""
+    file_path = 'FILE_PATH'
     lr_model = LinearRegressionModel(lags=3)
-    data = lr_model.load_data(file_path, column_name)
+    data = lr_model.load_data(file_path)
     lr_model.fit(data)
     forecast = lr_model.predict(data, steps=5)
