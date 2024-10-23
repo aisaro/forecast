@@ -113,7 +113,7 @@ class ARIMAModel:
         
         return pd.DataFrame(forecast_list)
 def main():
-    file_path = '/Users/anabellaisaro/Documents/Documents - Anabella’s MacBook Pro/Northwestern/Projects/Deloitte/forecast/data/'
+    file_path = ''
     input_file_path = os.path.join(os.path.dirname(file_path), 'Capstone_Dataset.csv')
     data = pd.read_csv(input_file_path)
     arima = ARIMAModel(data, p=1, d=1, q=1)
