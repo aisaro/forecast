@@ -4,76 +4,126 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller
 import warnings
 import matplotlib.pyplot as plt
+import os
 
 # To ignore warnings from ARIMA
 warnings.filterwarnings("ignore")
 
 class ARIMAModel:
-    def __init__(self, p, d, q):
+    def __init__(self, data, p, d, q):
 
         self.p = p
         self.d = d
         self.q = q
+        self.data = data
         self.model = None
         self.fitted_model = None
-    
-    def load_data(self, file_path):
-        data = pd.read_csv(file_path)
-        data['Store_Number'] = data['Store'].str.split('_').str[1]
-        data['Department_Number'] = data['DEPARTMENT'].str.extract(r'(\d+)')
-        data['SKU_Number'] = data['SKU'].str.extract(r'(\d+)')
-        data['Category_Number'] = data['CATEGORY'].str.extract(r'(\d+)')
-        data['Week'] = pd.to_datetime(data['Week'])
-        return data
-    
-    def fit(self, data):
+        self.steps = None
 
-        self.model = ARIMA(data, order=(self.p, self.d, self.q))
-        self.fitted_model = self.model.fit()
-        print("Model fitted successfully.")
+    def load_data(self):
+        # TODO: ADF Test
+        # adf_result = self.perform_adf_test(self.data)
         
-    def predict(self, steps=1):
-
+        # # # Check if differencing is needed
+        # if adf_result[1] > 0.05:  # Non-stationary
+        self.data['Store_Number'] =  self.data['Store'].str.split('_').str[1]
+        self.data['Department_Number'] =  self.data['DEPARTMENT'].str.extract(r'(\d+)')
+        self.data['SKU_Number'] =   self.data['SKU'].str.extract(r'(\d+)')
+        self.data['Category_Number'] =  self.data['CATEGORY'].str.extract(r'(\d+)')
+        self.data['Week'] = pd.to_datetime( self.data['Week'])
+    
+    def perform_adf_test(self, data):
+        adf_result = adfuller(data['Units_Sold'])
+        return adf_result
+    
+    def fit(self, sku_data):
+        self.model = ARIMA(sku_data['Units_Sold'], order=(self.p, self.d, self.q))
+        self.fitted_model = self.model.fit()
+    
+    def predict(self):
         if self.fitted_model is None:
             raise ValueError("The model has not been fitted yet.")
-        forecast = self.fitted_model.forecast(steps=steps)
-        return forecast
+        self.store_forecasts = self.fitted_model.forecast(steps=self.steps)
+        
     
+    def fit_sku(self):
+        store_forecasts = {}
+        unique_skus = self.data['SKU_Number'].unique()
+        for sku in unique_skus:
+            sku_data = self.data[self.data['SKU_Number'] == sku].copy()
+            sku_data.set_index('Week', inplace=True)
+            sku_data  = sku_data.resample('W').sum()  # Weekly data
+            if len(sku_data) < 10:
+                continue
+            try:
+                self.fit(sku_data)
+                self.predict()
+                store_forecasts[sku] = self.store_forecasts
+            except Exception as e:
+                print(f"Could not fit model for SKU {sku} due to: {e}")
+        return store_forecasts
     def summary(self):
 
         if self.fitted_model is None:
             raise ValueError("The model has not been fitted yet.")
         return self.fitted_model.summary()
-    def plot_predictions(self, df, target_col, date_col):
-        forecast = model_fit.forecast(steps=208)  
-        print('Forecasted Units Sold for next 4 weeks:', forecast)
+    
+    def create_forecast_dataframe(self, store_name, forecasts):
+        forecast_list = []
+        
+        for sku, forecast in forecasts.items():
+            for week_offset in range(len(forecast)):
+                forecast_list.append({
+                    'Store_Name': store_name,
+                    'SKU_Number': sku,
+                    'Forecast_Week': pd.Timestamp.now() + pd.DateOffset(weeks=week_offset + 1),
+                    'Forecasted_Units_Sold': forecast[week_offset]
+                })
+        
+        return pd.DataFrame(forecast_list)
+    
+    def run_forecasting(self):
+        # store_names = self.data['Store_Number'].unique()
+        combined_forecasts = []
+        stores =['6']
+        self.steps = 7
+        for store in stores:
+            self.load_data()
+            self.data = self.data[self.data['Store_Number'] == store].copy()
+            forecasts = self.fit_sku()
+            forecast_df = self.create_forecast_dataframe(store, forecasts)
+            combined_forecasts.append(forecast_df)
 
-        plt.figure(figsize=(10, 6))
-        plt.plot(weekly_units_sold, label='Actual Units Sold', color='blue')
-        plt.plot(forecast.index, forecast, label='Forecasted Units Sold', color='red')
-        plt.xlabel('Week')
-        plt.ylabel('Units Sold')
-        plt.title('Units Sold Forecast using ARIMA')
-        plt.legend()
-        plt.show()
+        if combined_forecasts:
+            all_forecasts_df = pd.concat(combined_forecasts, ignore_index=True)
+            return all_forecasts_df
+        return pd.DataFrame()  # Return an empty DataFrame if no forecasts
+        # return forecasts
+    def create_forecast_dataframe(self, store_name, forecasts):
+        forecast_list = []
+        
+        for sku, forecast in forecasts.items():
+            for week_offset in range(len(forecast)):
+                forecast_list.append({
+                    'Store_Name': store_name,
+                    'SKU_Number': sku,
+                    'Forecast_Week': pd.Timestamp.now() + pd.DateOffset(weeks=week_offset + 1),
+                    'Forecasted_Units_Sale': forecast[week_offset]
+                })
+        
+        return pd.DataFrame(forecast_list)
+def main():
+    file_path = '/Users/anabellaisaro/Documents/Documents - Anabella’s MacBook Pro/Northwestern/Projects/Deloitte/forecast/data/'
+    input_file_path = os.path.join(os.path.dirname(file_path), 'Capstone_Dataset.csv')
+    data = pd.read_csv(input_file_path)
+    arima = ARIMAModel(data, p=1, d=1, q=1)
+    store_forecasts = arima.run_forecasting()
+    output_file_path = os.path.join(os.path.dirname(file_path), 'forecasted_sales.csv')
+    store_forecasts.to_csv(output_file_path, index=False) 
 
 if __name__ == "__main__":
-    file_path = 'FILE_PATH'
-    arima_model = ARIMAModel(p=1, d=1, q=1)
-    data = arima_model.load_data(file_path)
-    data.set_index('Week', inplace=True)
+    main()
 
-    weekly_units_sold = data.resample('W').sum()['Units_Sold']
-    adf_result = adfuller(weekly_units_sold)
-    print('ADF Statistic:', adf_result[0])
-    print('p-value:', adf_result[1])
-    if adf_result[1] > 0.05:
-        weekly_units_sold_diff = weekly_units_sold.diff().dropna()
-    else:
-        weekly_units_sold_diff = weekly_units_sold
-    model = ARIMA(weekly_units_sold_diff.dropna(), order=(1, 1, 1))  #
-    model_fit = model.fit()
 
-    print(model_fit.summary())
-
+        
     
