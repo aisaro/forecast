@@ -5,6 +5,7 @@ from statsmodels.tsa.stattools import adfuller
 import warnings
 import matplotlib.pyplot as plt
 import os
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 # To ignore warnings from ARIMA
 warnings.filterwarnings("ignore")
@@ -19,6 +20,7 @@ class ARIMAModel:
         self.model = None
         self.fitted_model = None
         self.steps = None
+        self.accuracy_metrics = {}
 
     def load_data(self):
         # TODO: ADF Test
@@ -56,9 +58,21 @@ class ARIMAModel:
             if len(sku_data) < 10:
                 continue
             try:
+                # Get actual values for the next 7 weeks
+                # actual_values = sku_data['Units_Sold'].iloc[-7:].values
                 self.fit(sku_data)
                 self.predict()
                 store_forecasts[sku] = self.store_forecasts
+                # # Calculate accuracy metrics
+                # mae = mean_absolute_error(actual_values, self.store_forecasts)
+                # mse = mean_squared_error(actual_values, self.store_forecasts)
+                # rmse = mean_squared_error(actual_values, self.store_forecasts, squared=False)  # RMSE
+
+                # self.accuracy_metrics[sku] = {
+                #     'MAE': mae,
+                #     'MSE': mse,
+                #     'RMSE': rmse
+                # }
             except Exception as e:
                 print(f"Could not fit model for SKU {sku} due to: {e}")
         return store_forecasts
@@ -68,13 +82,13 @@ class ARIMAModel:
             raise ValueError("The model has not been fitted yet.")
         return self.fitted_model.summary()
     
-    def create_forecast_dataframe(self, store_name, forecasts):
+    def create_forecast_dataframe(self, store_number, forecasts):
         forecast_list = []
         
         for sku, forecast in forecasts.items():
             for week_offset in range(len(forecast)):
                 forecast_list.append({
-                    'Store_Name': store_name,
+                    'Store_Number': store_number,
                     'SKU_Number': sku,
                     'Forecast_Week': pd.Timestamp.now() + pd.DateOffset(weeks=week_offset + 1),
                     'Forecasted_Units_Sold': forecast[week_offset]
@@ -82,12 +96,14 @@ class ARIMAModel:
         
         return pd.DataFrame(forecast_list)
     
-    def run_forecasting(self):
-        # store_names = self.data['Store_Number'].unique()
+    def run_forecasting(self, data):
+        self.load_data()
+        stores = data['Store_Number'].unique()
         combined_forecasts = []
-        stores =['6']
         self.steps = 7
         for store in stores:
+            # reload the data at each store
+            self.data = data
             self.load_data()
             self.data = self.data[self.data['Store_Number'] == store].copy()
             forecasts = self.fit_sku()
@@ -98,26 +114,13 @@ class ARIMAModel:
             all_forecasts_df = pd.concat(combined_forecasts, ignore_index=True)
             return all_forecasts_df
         return pd.DataFrame()  # Return an empty DataFrame if no forecasts
-        # return forecasts
-    def create_forecast_dataframe(self, store_name, forecasts):
-        forecast_list = []
-        
-        for sku, forecast in forecasts.items():
-            for week_offset in range(len(forecast)):
-                forecast_list.append({
-                    'Store_Name': store_name,
-                    'SKU_Number': sku,
-                    'Forecast_Week': pd.Timestamp.now() + pd.DateOffset(weeks=week_offset + 1),
-                    'Forecasted_Units_Sale': forecast[week_offset]
-                })
-        
-        return pd.DataFrame(forecast_list)
+
 def main():
-    file_path = ''
+    file_path = '/Users/anabellaisaro/Documents/Documents - Anabella’s MacBook Pro/Northwestern/Projects/Deloitte/forecast/data/'
     input_file_path = os.path.join(os.path.dirname(file_path), 'Capstone_Dataset.csv')
     data = pd.read_csv(input_file_path)
     arima = ARIMAModel(data, p=1, d=1, q=1)
-    store_forecasts = arima.run_forecasting()
+    store_forecasts = arima.run_forecasting(data)
     output_file_path = os.path.join(os.path.dirname(file_path), 'forecasted_sales.csv')
     store_forecasts.to_csv(output_file_path, index=False) 
 
