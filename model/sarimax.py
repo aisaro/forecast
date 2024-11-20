@@ -25,8 +25,7 @@ class SARIMAXForecastingModel:
         self.origin_data['Store_Number'] = self.origin_data['Store_Number'].astype(int, errors='ignore')  # Convert to int
         self.origin_data['SKU_Number'] = self.origin_data['SKU'].str.extract(r'(\d+)')
         self.origin_data['SKU_Number'] = self.origin_data['SKU_Number'].astype(int, errors='ignore')  # Convert to int
-        self.origin_data['Week'] = pd.to_datetime(self.origin_data['Week']).dt.tz_localize(None)
-
+        self.origin_data['Week'] = pd.to_datetime(self.origin_data['Week'], errors='coerce')
 
         us_holidays = holidays.CountryHoliday('US', years=years)
         holiday_dates = pd.to_datetime(list(us_holidays.keys()))
@@ -63,6 +62,7 @@ class SARIMAXForecastingModel:
             for group in unique_groups:
                 group_data = sku_data[sku_data[group_column] == group].copy()
                 group_data.set_index('Week', inplace=True)
+                group_data = group_data.fillna(0)
                 group_data = group_data.resample('W').sum()
 
                 train_size = int(len(group_data) * 0.8)
