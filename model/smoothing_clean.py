@@ -14,10 +14,10 @@ warnings.filterwarnings("ignore")
 
 class ExponentialSmoothingModel:
     def __init__(self, data):
-        self.origin_data = data
         self.index_data = None
         self.data = data
         self.steps = None
+
 
     def load_data(self):
         years = [2020, 2021, 2023, 2024, 2025]
@@ -60,34 +60,33 @@ class ExponentialSmoothingModel:
                 try:
                     model = ExponentialSmoothing(y_train, seasonal='add', seasonal_periods=52)
                     fitted_model = model.fit()
-                    y_pred = fitted_model.forecast(steps=len(y_test))
-
 
                     # Forecast for y_test weeks
                     forecast_index = y_test.index  # Align forecast with test set index
                     y_pred = fitted_model.forecast(steps=len(forecast_index))
                     y_pred_series = pd.Series(y_pred, index=forecast_index)
-                    mse = mean_squared_error(y_test, y_pred)
-                    rmse = np.sqrt(mse)
-                    mae = mean_absolute_error(y_test, y_pred)
 
-                    group_accuracy.append({'Store': store, group_column: group, 'mse': mse, 'rmse': rmse, 'mae': mae})
-                    group_prediction[group] = y_pred
+                    mse = mean_squared_error(y_test, y_pred_series)
+                    rmse = np.sqrt(mse)
+                    mae = mean_absolute_error(y_test, y_pred_series)
+
+                    group_accuracy.append({'Store': store, group_column: sku, 'mse': mse, 'rmse': rmse, 'mae': mae})
+                    group_prediction[sku] = y_pred_series
 
                 except Exception as e:
-                    print(f"Could not fit model for {group_column} {group} in Store {store} due to: {e}")
+                    print(f"Could not fit model for {group_column} {sku} in Store {store} due to: {e}")
 
         return pd.DataFrame(group_accuracy), group_prediction
 
-    def create_prediction_dataframe(self, store, prediction):
+    def create_prediction_dataframe(self, store, group_column, prediction):
         prediction_list = []
 
-        for group, pred in prediction.items():
-            for week_offset, forecast in enumerate(pred):
+        for group, pred_series in prediction.items():
+            for forecast_week, forecast in pred_series.items():
                 prediction_list.append({
                     'Store': store,
-                    'group_column': group,
-                    'Forecast_Week': pd.Timestamp.now() + pd.DateOffset(weeks=week_offset + 1),
+                    'SKU_Number': group,
+                    'Forecast_Week': forecast_week,
                     'Forecasted_Units_Sold': forecast,
                 })
 
@@ -98,13 +97,13 @@ class ExponentialSmoothingModel:
         combined_metrics = []
         combined_prediction = []
 
-        for store in self.data['Store_Number'].unique():
-            for group_column in ['SKU_Number', 'Department', 'Category']:
-                group_metrics, group_prediction = self.fit_forecast(group_column, store)
-                prediction_df = self.create_prediction_dataframe(store, group_column, group_prediction)
+        # for store in self.data['Store_Number'].unique():
+        for group_column in ['Department', 'Category']:
+            group_metrics, group_prediction = self.fit_forecast(group_column, 5)
+            prediction_df = self.create_prediction_dataframe(5, group_column, group_prediction)
 
-                combined_metrics.append(group_metrics)
-                combined_prediction.append(prediction_df)
+            combined_metrics.append(group_metrics)
+            combined_prediction.append(prediction_df)
 
         all_metrics_df = pd.concat(combined_metrics, ignore_index=True)
         all_predictions_df = pd.concat(combined_prediction, ignore_index=True)
@@ -120,8 +119,8 @@ def main():
     es_model = ExponentialSmoothingModel(data)
     all_prediction_df, all_metric_df = es_model.run_forecasting()
 
-    output_file_path = os.path.join(os.path.dirname(file_path), 'forecasted_sales_grouped_exp_smoothing.csv')
-    metric_output_file_path = os.path.join(os.path.dirname(file_path), 'metrics-grouped_exp_smoothing.csv')
+    output_file_path = os.path.join(os.path.dirname(file_path), 'forecasted_sales_grouped_exp_smoothing_clean1.csv')
+    metric_output_file_path = os.path.join(os.path.dirname(file_path), 'metrics-grouped_exp_smoothing_clean1.csv')
 
     all_prediction_df.to_csv(output_file_path, index=False)
     all_metric_df.to_csv(metric_output_file_path, index=False)
