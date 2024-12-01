@@ -54,11 +54,13 @@ class SARIMAXForecastingModel:
         group_accuracy = []
         group_prediction = {}
         store_data = self.data[self.data['Store_Number'] == store]
-        unique_groups = ['Home']  # Example group
+        #TODO uncomment
+        # unique_groups = store_data[group_column].unique()
+        unique_groups = ['Shoes']  
         unique_skus = self.data['SKU_Number'].unique()
 
         for sku in unique_skus:
-            sku_data = store_data[store_data['SKU_Number'] == sku].copy()  # Filter for specific SKU
+            sku_data = store_data[store_data['SKU_Number'] == sku].copy()  
             for group in unique_groups:
                 group_data = sku_data[sku_data[group_column] == group].copy()
                 group_data.set_index('Week', inplace=True)
@@ -67,7 +69,7 @@ class SARIMAXForecastingModel:
 
                 train_size = int(len(group_data) * 0.8)
                 y = group_data['UNITS_SOLD']
-                exog = group_data[['is_week_before_holiday', 'Adj_Close', 'GDP']]  # External regressors
+                exog = group_data[['is_week_before_holiday', 'Adj_Close', 'GDP']]  
 
                 y_train, y_test = y[:train_size], y[train_size:]
                 exog_train, exog_test = exog[:train_size], exog[train_size:]
@@ -77,7 +79,7 @@ class SARIMAXForecastingModel:
 
                 try:
                     # Adding seasonality with SARIMAX and including exog
-                    seasonal_order = (1, 0, 1, 52)  # Example: Weekly seasonality
+                    seasonal_order = (1, 0, 1, 52)  
                     model = SARIMAX(y_train, order=(5, 1, 0), seasonal_order=seasonal_order, exog=exog_train)
                     fitted_model = model.fit()
 
@@ -89,8 +91,9 @@ class SARIMAXForecastingModel:
                     mse = mean_squared_error(y_test, y_pred_series)
                     rmse = np.sqrt(mse)
                     mae = mean_absolute_error(y_test, y_pred_series)
+                    mape = np.mean(np.abs((y_test - y_pred_series) / y_test)) * 100
 
-                    group_accuracy.append({'Store': store, group_column: sku, 'mse': mse, 'rmse': rmse, 'mae': mae})
+                    group_accuracy.append({'Store': store, 'SKU_Number': sku, 'mse': mse, 'rmse': rmse, 'mae': mae, 'mape': mape})
                     group_prediction[sku] = y_pred_series
 
                 except Exception as e:
@@ -117,7 +120,7 @@ class SARIMAXForecastingModel:
         combined_metrics = []
         combined_prediction = []
 
-        for group_column in ['Department']:
+        for group_column in ['Department', 'Category']:
             group_metrics, group_prediction = self.fit_forecast(group_column, 5)
             prediction_df = self.create_prediction_dataframe(5, group_column, group_prediction)
 
@@ -136,8 +139,8 @@ def main():
     arima_model = SARIMAXForecastingModel(data)
     all_prediction_df, all_metric_df = arima_model.run_forecasting()
 
-    output_file_path = os.path.join(os.path.dirname(file_path), 'forecasted_sales_SARIMAX_exog.csv')
-    metric_output_file_path = os.path.join(os.path.dirname(file_path), 'metrics_SARIMAX_exog.csv')
+    output_file_path = os.path.join(os.path.dirname(file_path), 'category/forecasted_sales_SARIMAX_exog_shoes.csv')
+    metric_output_file_path = os.path.join(os.path.dirname(file_path), 'category/metrics_SARIMAX_exog_shoes.csv')
 
     all_prediction_df.to_csv(output_file_path, index=False)
     all_metric_df.to_csv(metric_output_file_path, index=False)

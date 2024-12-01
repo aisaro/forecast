@@ -13,7 +13,10 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import GridSearchCV
-
+from sklearn.ensemble import StackingRegressor, VotingRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.linear_model import Ridge
+from sklearn.svm import SVR
 warnings.filterwarnings("ignore")
 
 
@@ -25,19 +28,15 @@ class ExponentialSmoothingModel:
         self.steps = None
 
     def load_data(self):
-        years = [2020, 2021, 2023, 2024, 2025]
-        self.data['Store_Location'] = self.data['Store_SKU'].str.split('_').str[1]
-        self.data['Store_Location'] = self.data['Store_Location'].astype(int, errors='ignore')  # Convert to int
-        self.data['Store_Number'] = self.data['Store_SKU'].str.extract(r'(\d+)')
-        self.data['Store_Number'] = self.data['Store_Number'].astype(int, errors='ignore')  # Convert to int
-        self.data['SKU_Number'] = self.data['SKU'].str.extract(r'(\d+)')
-        self.data['SKU_Number'] = self.data['SKU_Number'].astype(int, errors='ignore')  # Convert to int
-        self.data['Week'] = pd.to_datetime(self.data['Week']).dt.tz_localize(None)
-        us_holidays = holidays.CountryHoliday('US', years=years)
-        holiday_dates = pd.to_datetime(list(us_holidays.keys()))
-        self.data['is_week_before_holiday'] = self.data['Week'].apply(
-            lambda x: int(any((0 < (holiday - x).days <= 7) for holiday in holiday_dates))
-        )
+        self.data['Store_Location'] =  self.data['Store_Num'].str.split('_').str[1]
+        self.data['Store_Location'] =  self.data['Store_Location'].astype(int, errors='ignore')  # Convert to int, ignore errors for non-convertible values
+        self.data['Store_Number'] =  self.data['Store_Num'].str.extract(r'(\d+)')
+        self.data['Store_Number'] =  self.data['Store_Number'].astype(int, errors='ignore')  # Convert to int
+        self.data['SKU_Number'] =  self.data['SKU'].str.extract(r'(\d+)')
+        self.data['SKU_Number'] =  self.data['SKU_Number'].astype(int, errors='ignore')  # Convert to int
+        self.data['Week'] = pd.to_datetime( self.data['Week'])
+        self.data =  self.data.rename(columns={"Units_Sold": "UNITS_SOLD"})
+
     def fit_forecast(self):
         group_accuracy = []
         group_prediction = {}
@@ -45,10 +44,10 @@ class ExponentialSmoothingModel:
 
         # Filter for specific store, SKU, and Category
         group_data = store_data[
-            (store_data['Store_Location'] == 'Chicago') &
+            (store_data['Store_Location'] == 'Baltimore') &
             # (store_data['Category'] == 'Womens') &
             # (store_data['Department'] == 'Grocery') &
-            (store_data['SKU_Number'] == 227) 
+            (store_data['SKU_Number'] == 335) 
         ]
 
         group_data.set_index('Week', inplace=True)
@@ -65,7 +64,7 @@ class ExponentialSmoothingModel:
         # y_test = y[train_end_index:]  # Test data starts from start_week
          # Create additional features
         group_data['Week_Number'] = np.arange(len(group_data))  
-        X = group_data[['Week_Number', 'is_week_before_holiday']]  
+        X = group_data[['Week_Number']]  
         y = group_data['UNITS_SOLD']
 
         train_size = int(len(group_data) * 0.8)
@@ -76,36 +75,46 @@ class ExponentialSmoothingModel:
             print("y_train has fewer than 10 elements. Skipping...")
         else:
             try:
-            # Create polynomial features
-                # Define parameter grid
-                param_grid = {
-                    'n_estimators': [100, 200, 300],
-                    'max_depth': [10, 20, 30, None],
-                    'min_samples_split': [2, 5, 10],
-                    'min_samples_leaf': [1, 2, 5],
-                    'max_features': ['sqrt', 'log2', 0.8]
-                }
+                # Define base models
+                random_forest = RandomForestRegressor(n_estimators=100, random_state=42)
+                gradient_boosting = GradientBoostingRegressor(n_estimators=100, random_state=42)
+                ridge = Ridge(alpha=1.0)
+                svr = SVR(kernel='rbf', C=1.0)
 
-                # Initialize RandomForestRegressor
-                model = RandomForestRegressor(random_state=42)
+                # ## 1. Stacking Regressor ###
+                # stacking_regressor = StackingRegressor(
+                #     estimators=[
+                #         ('rf', random_forest),
+                #         ('gb', gradient_boosting),
+                #         ('ridge', ridge)
+                #     ],
+                #     final_estimator=SVR(kernel='linear')
+                # )
 
-                # Set up GridSearchCV
-                grid_search = GridSearchCV(
-                    estimator=model,
-                    param_grid=param_grid,
-                    cv=3,
-                    scoring='neg_mean_squared_error',
-                    n_jobs=-1
+                # # Fit and predict with Stacking Regressor
+                # stacking_regressor.fit(X_train, y_train)
+                # y_pred = stacking_regressor.predict(X_test)
+
+                # # Convert predictions to a pandas Series
+                # y_pred_series = pd.Series(y_pred, index=y_test.index)
+                # # Fit and predict with Stacking Regressor
+                # stacking_regressor.fit(X_train, y_train)
+                # stacking_pred = stacking_regressor.predict(X_test)
+                # stacking_mse = mean_squared_error(y_test, stacking_pred)
+                # print(f"Stacking Regressor MSE: {stacking_mse:.4f}")
+
+                ### 2. Voting Regressor ###
+                voting_regressor = VotingRegressor(
+                    estimators=[
+                        ('rf', random_forest),
+                        ('gb', gradient_boosting),
+                        ('ridge', ridge)
+                    ]
                 )
 
-                # Fit grid search to training data
-                grid_search.fit(X_train, y_train)
-
-                # Use the best estimator for predictions
-                best_model = grid_search.best_estimator_
-                y_pred = best_model.predict(X_test)
-
-                # Convert predictions to a pandas Series
+                # Fit and predict with Voting Regressor
+                voting_regressor.fit(X_train, y_train)
+                y_pred = voting_regressor.predict(X_test)
                 y_pred_series = pd.Series(y_pred, index=y_test.index)
 
                 # Calculate error metrics
@@ -169,7 +178,7 @@ class ExponentialSmoothingModel:
 
 def main():
     file_path = '/Users/anabellaisaro/Documents/Documents - Anabella’s MacBook Pro/Northwestern/Projects/Deloitte/forecast/data/'
-    input_file_path = os.path.join(os.path.dirname(file_path), 'Capstone_Forecasting_Data_updated.csv')
+    input_file_path = os.path.join(os.path.dirname(file_path), 'store_sku_level.csv')
     data = pd.read_csv(input_file_path)
 
     es_model = ExponentialSmoothingModel(data)

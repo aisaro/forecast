@@ -19,11 +19,11 @@ class SARIMAXForecastingModel:
     def load_data(self):
         years = [2020, 2021, 2023, 2024, 2025]
         self.data['Store_Location'] = self.data['Store_SKU'].str.split('_').str[1]
-        self.data['Store_Location'] = self.data['Store_Location'].astype(int, errors='ignore')  # Convert to int
+        self.data['Store_Location'] = self.data['Store_Location'].astype(int, errors='ignore')  
         self.data['Store_Number'] = self.data['Store_SKU'].str.extract(r'(\d+)')
-        self.data['Store_Number'] = self.data['Store_Number'].astype(int, errors='ignore')  # Convert to int
+        self.data['Store_Number'] = self.data['Store_Number'].astype(int, errors='ignore')  
         self.data['SKU_Number'] = self.data['SKU'].str.extract(r'(\d+)')
-        self.data['SKU_Number'] = self.data['SKU_Number'].astype(int, errors='ignore')  # Convert to int
+        self.data['SKU_Number'] = self.data['SKU_Number'].astype(int, errors='ignore')  
         self.data['Week'] = pd.to_datetime(self.data['Week']).dt.tz_localize(None)
 
         us_holidays = holidays.CountryHoliday('US', years=years)
@@ -36,11 +36,11 @@ class SARIMAXForecastingModel:
         group_accuracy = []
         group_prediction = {}
         store_data = self.data[self.data['Store_Number'] == store]
-        unique_groups = ['Home']  # Example group
+        unique_groups = ['Home']  
         unique_skus = self.data['SKU_Number'].unique()
 
         for sku in unique_skus:
-            sku_data = store_data[store_data['SKU_Number'] == sku].copy()  # Filter for specific SKU
+            sku_data = store_data[store_data['SKU_Number'] == sku].copy()  
             for group in unique_groups:
                 group_data = sku_data[sku_data[group_column] == group].copy()
                 group_data.set_index('Week', inplace=True)
@@ -56,7 +56,7 @@ class SARIMAXForecastingModel:
 
                 try:
                     # Adding seasonality with SARIMAX
-                    seasonal_order = (1, 0, 1, 52)  # Example: Weekly seasonality
+                    seasonal_order = (1, 0, 1, 52)  
                     model = SARIMAX(y_train, order=(5, 1, 0), seasonal_order=seasonal_order)
                     fitted_model = model.fit()
 
@@ -95,8 +95,9 @@ class SARIMAXForecastingModel:
         self.load_data()
         combined_metrics = []
         combined_prediction = []
-
-        for group_column in ['Department']:
+        #TODO Uncomment aline 102 and replace 5 with store
+        # for store in self.data['Store_Number'].unique():
+        for group_column in ['Department', 'Category']:
             group_metrics, group_prediction = self.fit_forecast(group_column, 5)
             prediction_df = self.create_prediction_dataframe(5, group_column, group_prediction)
 
@@ -107,7 +108,6 @@ class SARIMAXForecastingModel:
         all_predictions_df = pd.concat(combined_prediction, ignore_index=True)
 
         return all_predictions_df, all_metrics_df
-
 
 def main():
     file_path = '/Users/anabellaisaro/Documents/Documents - Anabella’s MacBook Pro/Northwestern/Projects/Deloitte/forecast/data/'

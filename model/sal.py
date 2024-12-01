@@ -25,19 +25,15 @@ class ExponentialSmoothingModel:
         self.steps = None
 
     def load_data(self):
-        years = [2020, 2021, 2023, 2024, 2025]
-        self.data['Store_Location'] = self.data['Store_SKU'].str.split('_').str[1]
-        self.data['Store_Location'] = self.data['Store_Location'].astype(int, errors='ignore')  # Convert to int
-        self.data['Store_Number'] = self.data['Store_SKU'].str.extract(r'(\d+)')
-        self.data['Store_Number'] = self.data['Store_Number'].astype(int, errors='ignore')  # Convert to int
-        self.data['SKU_Number'] = self.data['SKU'].str.extract(r'(\d+)')
-        self.data['SKU_Number'] = self.data['SKU_Number'].astype(int, errors='ignore')  # Convert to int
-        self.data['Week'] = pd.to_datetime(self.data['Week']).dt.tz_localize(None)
-        us_holidays = holidays.CountryHoliday('US', years=years)
-        holiday_dates = pd.to_datetime(list(us_holidays.keys()))
-        self.data['is_week_before_holiday'] = self.data['Week'].apply(
-            lambda x: int(any((0 < (holiday - x).days <= 7) for holiday in holiday_dates))
-        )
+        self.data['Store_Location'] =  self.data['Store_Num'].str.split('_').str[1]
+        self.data['Store_Location'] =  self.data['Store_Location'].astype(int, errors='ignore')  # Convert to int, ignore errors for non-convertible values
+        self.data['Store_Number'] =  self.data['Store_Num'].str.extract(r'(\d+)')
+        self.data['Store_Number'] =  self.data['Store_Number'].astype(int, errors='ignore')  # Convert to int
+        self.data['SKU_Number'] =  self.data['SKU'].str.extract(r'(\d+)')
+        self.data['SKU_Number'] =  self.data['SKU_Number'].astype(int, errors='ignore')  # Convert to int
+        self.data['Week'] = pd.to_datetime( self.data['Week'])
+        self.data =  self.data.rename(columns={"Units_Sold": "UNITS_SOLD"})
+
     def fit_forecast(self):
         group_accuracy = []
         group_prediction = {}
@@ -45,10 +41,10 @@ class ExponentialSmoothingModel:
 
         # Filter for specific store, SKU, and Category
         group_data = store_data[
-            (store_data['Store_Location'] == 'Chicago') &
-            # (store_data['Category'] == 'Womens') &
+            (store_data['Store_Location'] == 'Dallas') &
+            (store_data['Category'] == 'Shoes') &
             # (store_data['Department'] == 'Grocery') &
-            (store_data['SKU_Number'] == 227) 
+            (store_data['SKU_Number'] == 326) 
         ]
 
         group_data.set_index('Week', inplace=True)
@@ -59,51 +55,24 @@ class ExponentialSmoothingModel:
         if start_index.empty:
             print(f"No data available starting from {start_week}.")
             return pd.DataFrame(group_accuracy), group_prediction
-
-        # train_end_index = group_data.index.get_loc(start_index[0])  # Get the index for splitting
-        # y_train = y[:train_end_index]  # Training data up to (but not including) start_week
-        # y_test = y[train_end_index:]  # Test data starts from start_week
-         # Create additional features
-        group_data['Week_Number'] = np.arange(len(group_data))  
-        X = group_data[['Week_Number', 'is_week_before_holiday']]  
+        train_size = int(len(group_data) * 0.8)
         y = group_data['UNITS_SOLD']
 
-        train_size = int(len(group_data) * 0.8)
-        X_train, X_test = X[:train_size], X[train_size:]
         y_train, y_test = y[:train_size], y[train_size:]
 
         if len(y_train) < 10:
             print("y_train has fewer than 10 elements. Skipping...")
         else:
             try:
-            # Create polynomial features
-                # Define parameter grid
-                param_grid = {
-                    'n_estimators': [100, 200, 300],
-                    'max_depth': [10, 20, 30, None],
-                    'min_samples_split': [2, 5, 10],
-                    'min_samples_leaf': [1, 2, 5],
-                    'max_features': ['sqrt', 'log2', 0.8]
-                }
+                # Adding seasonality with SARIMAX
+                seasonal_order = (1, 0, 1, 52)  
+                model = SARIMAX(y_train, order=(5, 1, 0), seasonal_order=seasonal_order)
+                fitted_model = model.fit()
 
-                # Initialize RandomForestRegressor
-                model = RandomForestRegressor(random_state=42)
-
-                # Set up GridSearchCV
-                grid_search = GridSearchCV(
-                    estimator=model,
-                    param_grid=param_grid,
-                    cv=3,
-                    scoring='neg_mean_squared_error',
-                    n_jobs=-1
-                )
-
-                # Fit grid search to training data
-                grid_search.fit(X_train, y_train)
-
-                # Use the best estimator for predictions
-                best_model = grid_search.best_estimator_
-                y_pred = best_model.predict(X_test)
+                # Forecast for y_test weeks
+                forecast_index = y_test.index  # Align forecast with test set index
+                y_pred = fitted_model.forecast(steps=len(forecast_index))
+                # y_pred = best_model.predict(X_test)
 
                 # Convert predictions to a pandas Series
                 y_pred_series = pd.Series(y_pred, index=y_test.index)
@@ -169,14 +138,16 @@ class ExponentialSmoothingModel:
 
 def main():
     file_path = '/Users/anabellaisaro/Documents/Documents - Anabella’s MacBook Pro/Northwestern/Projects/Deloitte/forecast/data/'
-    input_file_path = os.path.join(os.path.dirname(file_path), 'Capstone_Forecasting_Data_updated.csv')
+    # input_file_path = os.path.join(os.path.dirname(file_path), 'Capstone_Forecasting_Data_updated.csv')
+    input_file_path = os.path.join(os.path.dirname(file_path), 'category_sku_level.csv')
     data = pd.read_csv(input_file_path)
 
     es_model = ExponentialSmoothingModel(data)
     all_prediction_df, all_metric_df = es_model.run_forecasting()
 
-    output_file_path = os.path.join(os.path.dirname(file_path), 'forecasted_sales_exp_smoothing_sku.csv')
-    metric_output_file_path = os.path.join(os.path.dirname(file_path), 'metrics-exp_smoothing_sku.csv')
+    output_file_path = os.path.join(os.path.dirname(file_path), 'forecasted_sales_sal_cat.csv')
+
+    metric_output_file_path = os.path.join(os.path.dirname(file_path), 'metrics-sal_cat.csv')
 
     all_prediction_df.to_csv(output_file_path, index=False)
     all_metric_df.to_csv(metric_output_file_path, index=False)

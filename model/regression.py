@@ -6,6 +6,7 @@ import holidays
 from datetime import datetime
 import os
 import warnings
+from sklearn.preprocessing import PolynomialFeatures
 
 warnings.filterwarnings("ignore")
 
@@ -17,11 +18,11 @@ class RegressionForecastingModel:
     def load_data(self):
         years = [2020, 2021, 2023, 2024, 2025]
         self.data['Store_Location'] = self.data['Store_SKU'].str.split('_').str[1]
-        self.data['Store_Location'] = self.data['Store_Location'].astype(int, errors='ignore')  # Convert to int
+        self.data['Store_Location'] = self.data['Store_Location'].astype(int, errors='ignore')  
         self.data['Store_Number'] = self.data['Store_SKU'].str.extract(r'(\d+)')
-        self.data['Store_Number'] = self.data['Store_Number'].astype(int, errors='ignore')  # Convert to int
+        self.data['Store_Number'] = self.data['Store_Number'].astype(int, errors='ignore')  
         self.data['SKU_Number'] = self.data['SKU'].str.extract(r'(\d+)')
-        self.data['SKU_Number'] = self.data['SKU_Number'].astype(int, errors='ignore')  # Convert to int
+        self.data['SKU_Number'] = self.data['SKU_Number'].astype(int, errors='ignore')  
         self.data['Week'] = pd.to_datetime(self.data['Week']).dt.tz_localize(None)
 
         us_holidays = holidays.CountryHoliday('US', years=years)
@@ -34,19 +35,19 @@ class RegressionForecastingModel:
         group_accuracy = []
         group_prediction = {}
         store_data = self.data[self.data['Store_Number'] == store]
-        unique_groups = ['Home']  # Example group
+        unique_groups = ['Womens']  # Example group
         unique_skus = self.data['SKU_Number'].unique()
 
         for sku in unique_skus:
-            sku_data = store_data[store_data['SKU_Number'] == sku].copy()  # Filter for specific SKU
+            sku_data = store_data[store_data['SKU_Number'] == sku].copy()  
             for group in unique_groups:
                 group_data = sku_data[sku_data[group_column] == group].copy()
                 group_data.set_index('Week', inplace=True)
                 group_data = group_data.resample('W').sum()
 
                 # Create additional features
-                group_data['Week_Number'] = np.arange(len(group_data))  # Sequential number for weeks
-                X = group_data[['Week_Number', 'is_week_before_holiday']]  # Features: Week number and holiday flag
+                group_data['Week_Number'] = np.arange(len(group_data))  
+                X = group_data[['Week_Number', 'is_week_before_holiday']]  
                 y = group_data['UNITS_SOLD']
 
                 train_size = int(len(group_data) * 0.8)
@@ -57,17 +58,23 @@ class RegressionForecastingModel:
                     continue
 
                 try:
+                    # Create polynomial features
+                    poly = PolynomialFeatures(degree=3)
+                    X_train_poly = poly.fit_transform(X_train)  
+                    X_test_poly = poly.transform(X_test)      
                     model = LinearRegression()
-                    model.fit(X_train, y_train)
-                    y_pred = model.predict(X_test)
+                    model.fit(X_train_poly, y_train)
+                    y_pred = model.predict(X_test_poly)
+                
+                    y_pred_series = pd.Series(y_pred, index=y_test.index)
 
-                    mse = mean_squared_error(y_test, y_pred)
+                    mse = mean_squared_error(y_test, y_pred_series)
                     rmse = np.sqrt(mse)
-                    mae = mean_absolute_error(y_test, y_pred)
+                    mae = mean_absolute_error(y_test, y_pred_series)
+                    mape = np.mean(np.abs((y_test - y_pred_series) / y_test)) * 100
 
-                    group_accuracy.append({'Store': store, group_column: sku, 'mse': mse, 'rmse': rmse, 'mae': mae})
-                    group_prediction[sku] = pd.Series(y_pred, index=y_test.index)
-
+                    group_accuracy.append({'Store': store, 'SKU_Number': sku, 'mse': mse, 'rmse': rmse, 'mae': mae, 'mape': mape})
+                    group_prediction[sku] = y_pred_series
                 except Exception as e:
                     print(f"Could not fit model for {group_column} {sku} in Store {store} due to: {e}")
 
@@ -91,8 +98,9 @@ class RegressionForecastingModel:
         self.load_data()
         combined_metrics = []
         combined_prediction = []
-
-        for group_column in ['Department']:
+        #TODO Uncomment aline 102 and replace 5 with store
+        # for store in self.data['Store_Number'].unique():
+        for group_column in ['Department', 'Category']:
             group_metrics, group_prediction = self.fit_forecast(group_column, 5)
             prediction_df = self.create_prediction_dataframe(5, group_column, group_prediction)
 
@@ -113,8 +121,8 @@ def main():
     regression_model = RegressionForecastingModel(data)
     all_prediction_df, all_metric_df = regression_model.run_forecasting()
 
-    output_file_path = os.path.join(os.path.dirname(file_path), 'forecasted_sales_regression_dept-5-year.csv')
-    metric_output_file_path = os.path.join(os.path.dirname(file_path), 'metrics_regression_dept-5-year.csv')
+    output_file_path = os.path.join(os.path.dirname(file_path), 'category/forecasted_sales_regression_women.csv')
+    metric_output_file_path = os.path.join(os.path.dirname(file_path), 'category/metrics_regression_women.csv')
 
     all_prediction_df.to_csv(output_file_path, index=False)
     all_metric_df.to_csv(metric_output_file_path, index=False)

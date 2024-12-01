@@ -22,11 +22,11 @@ class ExponentialSmoothingModel:
     def load_data(self):
         years = [2020, 2021, 2023, 2024, 2025]
         self.data['Store_Location'] = self.data['Store_SKU'].str.split('_').str[1]
-        self.data['Store_Location'] = self.data['Store_Location'].astype(int, errors='ignore')  # Convert to int
+        self.data['Store_Location'] = self.data['Store_Location'].astype(int, errors='ignore')  
         self.data['Store_Number'] = self.data['Store_SKU'].str.extract(r'(\d+)')
-        self.data['Store_Number'] = self.data['Store_Number'].astype(int, errors='ignore')  # Convert to int
+        self.data['Store_Number'] = self.data['Store_Number'].astype(int, errors='ignore')  
         self.data['SKU_Number'] = self.data['SKU'].str.extract(r'(\d+)')
-        self.data['SKU_Number'] = self.data['SKU_Number'].astype(int, errors='ignore')  # Convert to int
+        self.data['SKU_Number'] = self.data['SKU_Number'].astype(int, errors='ignore')  
         self.data['Week'] = pd.to_datetime(self.data['Week']).dt.tz_localize(None)
 
         us_holidays = holidays.CountryHoliday('US', years=years)
@@ -39,7 +39,9 @@ class ExponentialSmoothingModel:
         group_accuracy = []
         group_prediction = {}
         store_data = self.data[self.data['Store_Number'] == store]
-        unique_groups = ['Home']  # Example group
+        #TODO uncomment
+        # unique_groups = store_data[group_column].unique()
+        unique_groups = ['Shoes']  # Example group
         unique_skus = self.data['SKU_Number'].unique()
 
         for sku in unique_skus:
@@ -69,8 +71,9 @@ class ExponentialSmoothingModel:
                     mse = mean_squared_error(y_test, y_pred_series)
                     rmse = np.sqrt(mse)
                     mae = mean_absolute_error(y_test, y_pred_series)
+                    mape = np.mean(np.abs((y_test - y_pred_series) / y_test)) * 100
 
-                    group_accuracy.append({'Store': store, group_column: sku, 'mse': mse, 'rmse': rmse, 'mae': mae})
+                    group_accuracy.append({'Store': store, 'SKU_Number': sku, 'mse': mse, 'rmse': rmse, 'mae': mae, 'mape': mape})
                     group_prediction[sku] = y_pred_series
 
                 except Exception as e:
@@ -96,7 +99,7 @@ class ExponentialSmoothingModel:
         self.load_data()
         combined_metrics = []
         combined_prediction = []
-
+        #TODO Uncomment aline 102 and replace 5 with store
         # for store in self.data['Store_Number'].unique():
         for group_column in ['Department', 'Category']:
             group_metrics, group_prediction = self.fit_forecast(group_column, 5)
@@ -119,8 +122,8 @@ def main():
     es_model = ExponentialSmoothingModel(data)
     all_prediction_df, all_metric_df = es_model.run_forecasting()
 
-    output_file_path = os.path.join(os.path.dirname(file_path), 'forecasted_sales_grouped_exp_smoothing_clean1.csv')
-    metric_output_file_path = os.path.join(os.path.dirname(file_path), 'metrics-grouped_exp_smoothing_clean1.csv')
+    output_file_path = os.path.join(os.path.dirname(file_path), 'category/forecasted_sales_exp_smoothing_shoes.csv')
+    metric_output_file_path = os.path.join(os.path.dirname(file_path), 'category/metrics_exp_smoothing_shoes.csv')
 
     all_prediction_df.to_csv(output_file_path, index=False)
     all_metric_df.to_csv(metric_output_file_path, index=False)
